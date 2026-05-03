@@ -446,11 +446,45 @@ DeviceType ||--o{ ModuleKitItem
 
 ### 1. Тип API
 
-Укажите, какой тип API вы будете использовать для взаимодействия микросервисов. Объясните своё решение.
+Используется смесь двух стилей:
+
+- **REST + OpenAPI 3** — для синхронных запросов от клиентов через API Gateway: получение информации об устройстве, обновление, отправка команды, чтение телеметрии. Понятный, есть готовые тулы (Swagger UI, кодогенерация клиентов и сервисов).
+- **AsyncAPI поверх RabbitMQ** — для событий между сервисами: телеметрия, ACK команд, регистрация устройств. Слабая связанность, ретраи, fan-out на нескольких потребителей.
+
+gRPC между внутренними сервисами тоже используется (см. диаграмму контейнеров), но как клиентский контракт документируется именно REST через OpenAPI — он важнее для интеграции и под него больше инструментов.
 
 ### 2. Документация API
 
-Здесь приложите ссылки на документацию API для микросервисов, которые вы спроектировали в первой части проектной работы. Для документирования используйте Swagger/OpenAPI или AsyncAPI.
+- REST: [api/openapi.yaml](api/openapi.yaml) — 5 эндпоинтов из 3 микросервисов.
+- AsyncAPI: [api/asyncapi.yaml](api/asyncapi.yaml) — 3 канала событий.
+
+**REST-эндпоинты:**
+
+| Метод | Путь | Сервис | Назначение |
+|-------|------|--------|-----------|
+| POST  | `/devices/pair`                        | Devices   | Привязать устройство к пользователю по pairing-коду |
+| GET   | `/devices/{device_id}`                 | Devices   | Получить информацию об устройстве |
+| PATCH | `/devices/{device_id}`                 | Devices   | Обновить имя или конфигурацию устройства |
+| POST  | `/devices/{device_id}/commands`        | Commands  | Отправить команду устройству (асинхронная доставка) |
+| GET   | `/devices/{device_id}/telemetry`       | Telemetry | Запросить показания устройства за период |
+
+**Каналы событий:**
+
+| Канал | Producer | Consumer | Назначение |
+|-------|----------|----------|-----------|
+| `telemetry.received`     | IoT Gateway     | Telemetry, Scenario Engine          | Сырые показания с устройств |
+| `commands.acknowledged`  | IoT Gateway     | Commands Service                    | ACK от устройств после выполнения команды |
+| `device.registered`      | Devices Service | Scenario Engine, Notification       | Новое устройство привязано к пользователю |
+
+**Просмотр документации:**
+
+```bash
+# Swagger UI / Redoc
+npx @redocly/cli preview-docs api/openapi.yaml
+
+# AsyncAPI Studio
+npx @asyncapi/cli start studio --file api/asyncapi.yaml
+```
 
 # Задание 5. Работа с docker и docker-compose
 

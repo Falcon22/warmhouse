@@ -1,0 +1,301 @@
+openapi: 3.0.3
+info:
+  title: WarmHouse REST API
+  description: |
+    REST API системы WarmHouse. Доступен через API Gateway.
+    Содержит эндпоинты сервисов Devices, Commands и Telemetry.
+  version: 1.0.0
+
+servers:
+  - url: https://api.warmhouse.io/v1
+    description: Production
+  - url: http://localhost:8080/api/v1
+    description: Local
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Devices
+  - name: Commands
+  - name: Telemetry
+
+paths:
+  /devices/pair:
+    post:
+      tags: [Devices]
+      summary: Привязать устройство к пользователю по pairing-коду
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PairRequest'
+      responses:
+        '201':
+          description: Устройство привязано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400':
+          description: Невалидный pairing-код или истёк срок
+        '404':
+          description: Pairing-код не найден
+        '409':
+          description: Устройство уже привязано
+
+  /devices/{device_id}:
+    get:
+      tags: [Devices]
+      summary: Получить информацию об устройстве
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '403':
+          description: Нет прав на устройство
+        '404':
+          description: Устройство не найдено
+
+    patch:
+      tags: [Devices]
+      summary: Обновить имя или конфигурацию устройства
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceUpdate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400':
+          description: Невалидная конфигурация для типа устройства
+        '404':
+          description: Устройство не найдено
+
+  /devices/{device_id}/commands:
+    post:
+      tags: [Commands]
+      summary: Отправить команду устройству
+      description: |
+        Команда принимается синхронно (202 Accepted), но доставка устройству идёт
+        асинхронно через Message Broker и MQTT. Финальный статус приходит через
+        событие `commands.acknowledged` (см. AsyncAPI).
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommandRequest'
+      responses:
+        '202':
+          description: Команда принята, доставка идёт асинхронно
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandAccepted'
+        '400':
+          description: Невалидная команда для типа устройства
+        '404':
+          description: Устройство не найдено
+        '503':
+          description: Устройство offline
+
+  /devices/{device_id}/telemetry:
+    get:
+      tags: [Telemetry]
+      summary: Получить показания устройства за период
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+        - name: metric
+          in: query
+          required: true
+          schema:
+            type: string
+            example: temperature
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: aggregation
+          in: query
+          schema:
+            type: string
+            enum: [raw, 1m, 1h, 1d]
+            default: raw
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryResponse'
+        '400':
+          description: Невалидный диапазон или метрика
+        '404':
+          description: Устройство не найдено
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    DeviceId:
+      name: device_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    Device:
+      type: object
+      required: [id, type, name, status, house_id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [HEATING, LIGHT, GATE, CAMERA, GENERIC]
+        name:
+          type: string
+        status:
+          type: string
+          enum: [UNPAIRED, ACTIVE, OFFLINE, DISABLED]
+        house_id:
+          type: string
+          format: uuid
+        serial_number:
+          type: string
+        config:
+          type: object
+          additionalProperties: true
+        last_seen_at:
+          type: string
+          format: date-time
+      example:
+        id: "5b2d3c11-0c02-4f10-9b34-dd92cd9c7a01"
+        type: HEATING
+        name: "Гостиная — отопление"
+        status: ACTIVE
+        house_id: "0e35a2b9-4f3e-4c6d-9a18-2c3a2c8d9b21"
+        serial_number: "WH-HEAT-00123"
+        config:
+          target_temp: 21.5
+        last_seen_at: "2026-05-03T18:42:01Z"
+
+    DeviceUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        config:
+          type: object
+          additionalProperties: true
+      example:
+        name: "Гостиная (новая)"
+        config:
+          target_temp: 22.0
+
+    PairRequest:
+      type: object
+      required: [pairing_code, house_id]
+      properties:
+        pairing_code:
+          type: string
+        house_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      example:
+        pairing_code: "WH-7G4D-9KQ2"
+        house_id: "0e35a2b9-4f3e-4c6d-9a18-2c3a2c8d9b21"
+        name: "Спальня — свет"
+
+    CommandRequest:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+      example:
+        action: "set_target_temp"
+        payload:
+          value: 22.5
+
+    CommandAccepted:
+      type: object
+      properties:
+        command_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING]
+      example:
+        command_id: "6a1f9e2c-4b80-49d7-8a3e-7e8a91234567"
+        status: PENDING
+
+    TelemetryResponse:
+      type: object
+      properties:
+        device_id:
+          type: string
+          format: uuid
+        metric:
+          type: string
+        unit:
+          type: string
+        points:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              value:
+                type: number
+      example:
+        device_id: "5b2d3c11-0c02-4f10-9b34-dd92cd9c7a01"
+        metric: temperature
+        unit: "°C"
+        points:
+          - timestamp: "2026-05-03T18:00:00Z"
+            value: 21.4
+          - timestamp: "2026-05-03T18:01:00Z"
+            value: 21.5
+          - timestamp: "2026-05-03T18:02:00Z"
+            value: 21.6
