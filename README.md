@@ -331,7 +331,116 @@ Device --> DeviceStatus
 
 # Задание 3. Разработка ER-диаграммы
 
-Добавьте сюда ER-диаграмму. Она должна отражать ключевые сущности системы, их атрибуты и тип связей между ними.
+**Сущности:**
+
+- **User** — пользователь системы (владелец дома или сотрудник поддержки).
+- **House** — дом пользователя.
+- **DeviceType** — каталог поддерживаемых типов устройств (отопление, свет, ворота, камера, generic).
+- **Device** — конкретное устройство, установленное в доме.
+- **TelemetryData** — записи телеметрии с устройств (в TimescaleDB).
+- **Scenario** — пользовательские сценарии when/then.
+- **ModuleKit** — комплект устройств для продажи.
+- **ModuleKitItem** — состав комплекта (типы устройств и количество).
+
+**Связи:**
+
+- User → House: один пользователь владеет несколькими домами, каждый дом принадлежит одному пользователю.
+- House → Device: дом содержит несколько устройств, каждое устройство в одном доме.
+- DeviceType → Device: один тип может быть у многих устройств.
+- Device → TelemetryData: одно устройство генерирует множество записей телеметрии.
+- User → Scenario: пользователь настраивает несколько сценариев.
+- ModuleKit → ModuleKitItem ← DeviceType: связь many-to-many через junction-таблицу.
+
+![ER-диаграмма](asserts/warmhouse_er.png)
+
+```markdown
+@startuml
+title ER-диаграмма WarmHouse
+
+entity User {
+  * id : UUID <<PK>>
+  --
+  * email : VARCHAR
+  * name : VARCHAR
+  password_hash : VARCHAR
+  role : ENUM
+  created_at : TIMESTAMP
+}
+
+entity House {
+  * id : UUID <<PK>>
+  --
+  * owner_id : UUID <<FK>>
+  * name : VARCHAR
+  address : TEXT
+  timezone : VARCHAR
+}
+
+entity DeviceType {
+  * id : VARCHAR <<PK>>
+  --
+  * name : VARCHAR
+  capabilities : JSONB
+  protocol : VARCHAR
+}
+
+entity Device {
+  * id : UUID <<PK>>
+  --
+  * type_id : VARCHAR <<FK>>
+  * house_id : UUID <<FK>>
+  * serial_number : VARCHAR
+  * name : VARCHAR
+  status : ENUM
+  config : JSONB
+  last_seen_at : TIMESTAMP
+}
+
+entity TelemetryData {
+  * id : BIGSERIAL <<PK>>
+  --
+  * device_id : UUID <<FK>>
+  * metric : VARCHAR
+  * value : FLOAT
+  unit : VARCHAR
+  * timestamp : TIMESTAMPTZ
+}
+
+entity Scenario {
+  * id : UUID <<PK>>
+  --
+  * owner_id : UUID <<FK>>
+  * name : VARCHAR
+  enabled : BOOLEAN
+  dsl : TEXT
+  created_at : TIMESTAMP
+}
+
+entity ModuleKit {
+  * id : UUID <<PK>>
+  --
+  * name : VARCHAR
+  description : TEXT
+  price : DECIMAL
+}
+
+entity ModuleKitItem {
+  * kit_id : UUID <<PK,FK>>
+  * type_id : VARCHAR <<PK,FK>>
+  --
+  quantity : INTEGER
+}
+
+User ||--o{ House : "владеет"
+User ||--o{ Scenario : "настраивает"
+House ||--o{ Device : "содержит"
+DeviceType ||--o{ Device : "тип"
+Device ||--o{ TelemetryData : "генерирует"
+ModuleKit ||--o{ ModuleKitItem
+DeviceType ||--o{ ModuleKitItem
+
+@enduml
+```
 
 # Задание 4. Создание и документирование API
 
