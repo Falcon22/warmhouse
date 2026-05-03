@@ -1,14 +1,4 @@
-# Project_template
-
-Это шаблон для решения проектной работы. Структура этого файла повторяет структуру заданий. Заполняйте его по мере работы над решением.
-
 # Задание 1. Анализ и планирование
-
-<aside>
-
-Чтобы составить документ с описанием текущей архитектуры приложения, можно часть информации взять из описания компании и условия задания. Это нормально.
-
-</aside
 
 ### 1. Описание функциональности монолитного приложения
 
@@ -71,6 +61,9 @@
 
 ### 5. Визуализация контекста системы — диаграмма С4
 
+
+![Контекстная диаграмма](asserts/warmhouse_context_as_is.png)
+
 ```markdown
 @startuml
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
@@ -94,19 +87,247 @@ Rel_Back(temp_api, smarthome, "Показания температуры")
 
 # Задание 2. Проектирование микросервисной архитектуры
 
-В этом задании вам нужно предоставить только диаграммы в модели C4. Мы не просим вас отдельно описывать получившиеся микросервисы и то, как вы определили взаимодействия между компонентами To-Be системы. Если вы правильно подготовите диаграммы C4, они и так это покажут.
+**Диаграмма контекста (To-Be)**
+
+![Диаграмма контекста To-Be](asserts/warmhouse_context_tobe.png)
+
+```markdown
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title Диаграмма контекста системы WarmHouse (To-Be)
+
+Person(user, "Пользователь", "Владелец умного дома. Сам подключает устройства и настраивает сценарии.")
+Person(support, "Customer Support", "Сотрудник поддержки.")
+
+System(smarthome, "Система управления Smart Home", "SaaS-платформа: устройства, телеметрия, сценарии.")
+
+System_Ext(partner_devices, "Партнёрские IoT-устройства", "Отопление, свет, ворота, камеры и др. Подключение по стандартным протоколам (MQTT / Matter / Zigbee).")
+System_Ext(payment, "Платёжный провайдер", "Оплата SaaS-подписки.")
+System_Ext(messaging, "Провайдеры уведомлений", "Email / SMS / Push.")
+
+Rel(user, smarthome, "Управление устройствами, телеметрия, сценарии", "HTTPS")
+Rel(support, smarthome, "Поддержка пользователей", "HTTPS")
+
+BiRel(smarthome, partner_devices, "Команды и телеметрия", "MQTT")
+Rel(smarthome, payment, "Платежи")
+Rel(smarthome, messaging, "Уведомления")
+
+@enduml
+```
 
 **Диаграмма контейнеров (Containers)**
 
-Добавьте диаграмму.
+![Диаграмма контейнеров](asserts/warmhouse_container.png)
+
+```markdown
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Диаграмма контейнеров системы WarmHouse (To-Be)
+
+Person(user, "Пользователь", "Владелец умного дома")
+
+System_Boundary(smarthome, "Система управления Smart Home") {
+    Container(web, "Web App", "JavaScript, React", "Веб-приложение")
+    Container(mobile, "Mobile App", "iOS / Android", "Мобильное приложение")
+
+    Container(gateway, "API Gateway", "Go", "Маршрутизация запросов, проверка JWT")
+
+    Container(auth, "Auth Service", "Go", "Регистрация и аутентификация пользователей")
+    ContainerDb(auth_db, "Auth Storage", "PostgreSQL", "Пользователи и роли")
+    ContainerDb(redis, "Redis", "Redis", "Сессии и кэш")
+
+    Container(devices, "Devices Service", "Go", "Реестр устройств, pairing, драйверы")
+    ContainerDb(devices_db, "Devices Storage", "PostgreSQL", "Устройства и конфигурации")
+
+    Container(telemetry, "Telemetry Service", "Go", "Хранение и выдача показаний")
+    ContainerDb(telemetry_db, "Telemetry Storage", "TimescaleDB", "Time-series измерения")
+
+    Container(commands, "Commands Service", "Go", "Отправка команд устройствам")
+
+    Container(scenario, "Scenario Engine", "Go", "Пользовательские сценарии when/then")
+    ContainerDb(scenario_db, "Scenario Storage", "PostgreSQL", "Правила и журнал срабатываний")
+
+    Container(notify, "Notification Service", "Go", "Email / Push / SMS")
+
+    ContainerQueue(rabbit, "Message Broker", "RabbitMQ", "Команды и доменные события")
+
+    Container(iot, "IoT Gateway", "Go", "Bridge MQTT ↔ RabbitMQ")
+    Container(mqtt, "MQTT Broker", "EMQX", "Канал устройств")
+}
+
+System_Ext(devices_ext, "Партнёрские IoT-устройства", "Подключаются по MQTT / Matter / Zigbee")
+System_Ext(messaging_ext, "Провайдеры уведомлений", "Email / SMS / Push")
+
+Rel(user, web, "Использует", "HTTPS")
+Rel(user, mobile, "Использует", "HTTPS")
+
+Rel(web, gateway, "REST + WebSocket", "HTTPS")
+Rel(mobile, gateway, "REST + WebSocket", "HTTPS")
+
+Rel(gateway, auth, "gRPC")
+Rel(gateway, devices, "gRPC")
+Rel(gateway, telemetry, "gRPC")
+Rel(gateway, commands, "gRPC")
+Rel(gateway, scenario, "gRPC")
+
+Rel(auth, auth_db, "SQL")
+Rel(auth, redis, "Сессии")
+Rel(devices, devices_db, "SQL")
+Rel(telemetry, telemetry_db, "SQL")
+Rel(scenario, scenario_db, "SQL")
+
+Rel(commands, rabbit, "publish команды", "AMQP")
+Rel(rabbit, iot, "consume", "AMQP")
+Rel(iot, mqtt, "publish/subscribe", "MQTT")
+BiRel(mqtt, devices_ext, "Команды и телеметрия", "MQTT")
+
+Rel(iot, rabbit, "publish telemetry, device events", "AMQP")
+Rel(rabbit, telemetry, "consume telemetry", "AMQP")
+Rel(rabbit, scenario, "consume events", "AMQP")
+Rel(scenario, rabbit, "publish команды и нотификации", "AMQP")
+Rel(rabbit, notify, "consume notifications", "AMQP")
+Rel(devices, rabbit, "publish device.registered/removed", "AMQP")
+
+Rel(notify, messaging_ext, "Отправка")
+
+@enduml
+```
 
 **Диаграмма компонентов (Components)**
 
-Добавьте диаграмму для каждого из выделенных микросервисов.
+Подробная декомпозиция показана для Devices Service — самого нагруженного с точки зрения паттернов сервиса (driver pattern, pairing, event publishing). Остальные сервисы устроены по тому же шаблону: API → бизнес-логика → репозиторий + event publisher.
+
+![Диаграмма компонентов Devices Service](asserts/warmhouse_component.png)
+
+```markdown
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Диаграмма компонентов: Devices Service
+
+Container(gateway, "API Gateway", "Go")
+Container(commands, "Commands Service", "Go")
+Container(iot, "IoT Gateway", "Go")
+ContainerDb(devices_db, "Devices Storage", "PostgreSQL")
+ContainerQueue(rabbit, "Message Broker", "RabbitMQ")
+
+Container_Boundary(devices, "Devices Service") {
+    Component(api, "API", "Go, Gin + gRPC", "REST для UI и gRPC для других сервисов")
+    Component(service, "Device Service", "Go", "Бизнес-логика: регистрация, валидация, владение")
+    Component(pairing, "Pairing Manager", "Go", "Self-service подключение устройств")
+    Component(drivers, "Drivers", "Go", "Heating, Light, Gate, Camera + Generic MQTT (fallback). Plug-in регистрация для новых типов")
+    Component(repo, "Device Repository", "Go, pgx", "Доступ к БД")
+    Component(events, "Event Publisher", "Go", "Публикация device.registered/removed")
+}
+
+Rel(gateway, api, "REST", "HTTPS")
+Rel(commands, api, "GetDevice", "gRPC")
+Rel(iot, api, "GetDevice", "gRPC")
+
+Rel(api, service, "")
+Rel(api, pairing, "")
+Rel(service, repo, "")
+Rel(service, drivers, "Получает спецификацию типа")
+Rel(service, events, "")
+Rel(pairing, repo, "")
+
+Rel(repo, devices_db, "SQL")
+Rel(events, rabbit, "publish", "AMQP")
+
+@enduml
+```
 
 **Диаграмма кода (Code)**
 
-Добавьте одну диаграмму или несколько.
+UML-диаграмма классов для driver pattern в Devices Service — ключевой механизм расширяемости под новые типы устройств.
+
+![Диаграмма кода Devices Service](asserts/warmhouse_code.png)
+
+```markdown
+@startuml
+title Code View: Devices Service — driver pattern
+
+class Device {
+    +id: DeviceID
+    +ownerID: UserID
+    +type: DeviceType
+    +status: DeviceStatus
+    +config: DeviceConfig
+    --
+    +Pair(code): error
+    +ApplyConfig(cfg): error
+}
+
+enum DeviceType {
+    HEATING
+    LIGHT
+    GATE
+    CAMERA
+    GENERIC
+}
+
+enum DeviceStatus {
+    UNPAIRED
+    ACTIVE
+    OFFLINE
+}
+
+interface DeviceDriver {
+    +Type(): DeviceType
+    +ValidateCommand(cmd): error
+    +EncodePayload(cmd): []byte
+    +DecodeTelemetry(raw): Telemetry
+}
+
+class HeatingDriver
+class LightDriver
+class GenericDriver
+
+HeatingDriver ..|> DeviceDriver
+LightDriver ..|> DeviceDriver
+GenericDriver ..|> DeviceDriver
+
+class DriverRegistry {
+    -drivers: map[DeviceType]DeviceDriver
+    +Register(d: DeviceDriver)
+    +Get(t: DeviceType): DeviceDriver
+}
+
+DriverRegistry o-- DeviceDriver
+
+class DeviceService {
+    -repo: DeviceRepository
+    -drivers: DriverRegistry
+    -events: EventPublisher
+    --
+    +Register(req): Device
+    +UpdateConfig(id, cfg): error
+    +Remove(id): error
+}
+
+interface DeviceRepository {
+    +Get(id): Device
+    +Save(d): error
+    +ListByOwner(o): []Device
+}
+
+class PostgresDeviceRepository
+PostgresDeviceRepository ..|> DeviceRepository
+
+interface EventPublisher {
+    +Publish(e: DomainEvent): error
+}
+
+DeviceService --> DeviceRepository
+DeviceService --> DriverRegistry
+DeviceService --> EventPublisher
+Device --> DeviceType
+Device --> DeviceStatus
+
+@enduml
+```
 
 # Задание 3. Разработка ER-диаграммы
 
