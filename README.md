@@ -552,3 +552,71 @@ Locations - название комнаты, sensorId - идентификато
 2. Обеспечьте взаимодействие между микросервисами и монолитом (при желании с помощью брокера сообщений), чтобы постепенно перенести функциональность из монолита в микросервисы. 
 
 В результате у вас должны быть созданы Dockerfiles и docker-compose для запуска микросервисов. 
+
+### Решение
+
+Созданы два микросервиса на разных ООП-языках, оба интегрированы с существующим монолитом и запускаются вместе с ним через `docker-compose`.
+
+**Devices Service — Python + FastAPI**
+
+[apps/devices_service](apps/devices_service) — управление устройствами, in-memory хранилище, класс `DeviceRegistry`.
+
+| Метод | Путь | Назначение |
+|-------|------|------------|
+| GET    | `/devices`             | Список устройств |
+| GET    | `/devices/{id}`        | Получить устройство |
+| POST   | `/devices`             | Создать устройство |
+| DELETE | `/devices/{id}`        | Удалить устройство |
+| GET    | `/health`              | Healthcheck |
+
+Порт `8082`.
+
+**Telemetry Service — Node.js + TypeScript + Express**
+
+[apps/telemetry_service](apps/telemetry_service) — приём и выдача показаний, in-memory хранилище, класс `TelemetryStore`.
+
+| Метод | Путь | Назначение |
+|-------|------|------------|
+| POST | `/telemetry`              | Сохранить измерение |
+| GET  | `/telemetry?device_id=&metric=` | Получить измерения с фильтрами |
+| GET  | `/health`                 | Healthcheck + количество хранимых записей |
+
+Порт `8083`.
+
+**Интеграция с монолитом (Strangler Fig)**
+
+Монолит модифицирован минимально: при каждом успешном получении температуры от `temperature-api` он fire-and-forget POST'ит данные в `telemetry-service`. Если переменная `TELEMETRY_SERVICE_URL` не задана — forwarding отключён, монолит работает как раньше.
+
+Изменения:
+- [apps/smart_home/services/temperature_service.go](apps/smart_home/services/temperature_service.go) — добавлено поле `TelemetryURL` и метод `forwardTelemetry`.
+- [apps/smart_home/main.go](apps/smart_home/main.go) — читает `TELEMETRY_SERVICE_URL` из env.
+- [apps/docker-compose.yml](apps/docker-compose.yml) — для контейнера `app` задан `TELEMETRY_SERVICE_URL=http://telemetry-service:8083`.
+
+Devices Service пока работает standalone — это следующий шаг миграции (когда в монолите CRUD сенсоров заменится на проксирование к Devices Service).
+
+**Запуск и проверка**
+
+```bash
+cd apps
+docker compose up --build -d
+
+# Devices Service
+curl -X POST http://localhost:8082/devices \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Heater","type":"heating","location":"Living Room"}'
+curl http://localhost:8082/devices
+
+# Telemetry Service напрямую
+curl -X POST http://localhost:8083/telemetry \
+  -H 'Content-Type: application/json' \
+  -d '{"device_id":"1","metric":"temperature","value":21.5,"unit":"°C"}'
+curl 'http://localhost:8083/telemetry?device_id=1'
+
+# Через интеграцию с монолитом:
+# любой вызов GET /api/v1/sensors на монолите подтягивает температуру
+# из temperature-api и форвардит её в telemetry-service.
+curl http://localhost:8080/api/v1/sensors
+curl http://localhost:8083/telemetry
+```
+
+Сообщений-брокер не использовался — для MVP интеграция через прямой HTTP проще и достаточна. Переход на RabbitMQ показан в архитектуре (см. диаграмму контейнеров в задании 2) и реализуется на следующих этапах.

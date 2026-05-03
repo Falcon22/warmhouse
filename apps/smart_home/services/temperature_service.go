@@ -1,16 +1,19 @@
 package services
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 )
 
 // TemperatureService handles fetching temperature data from external API
 type TemperatureService struct {
-	BaseURL    string
-	HTTPClient *http.Client
+	BaseURL      string
+	TelemetryURL string
+	HTTPClient   *http.Client
 }
 
 // TemperatureResponse represents the response from the temperature API
@@ -25,14 +28,46 @@ type TemperatureResponse struct {
 	Description string    `json:"description"`
 }
 
-// NewTemperatureService creates a new temperature service
-func NewTemperatureService(baseURL string) *TemperatureService {
+// NewTemperatureService creates a new temperature service.
+// If telemetryURL is non-empty, every successful reading is also forwarded to
+// the Telemetry microservice (Strangler Fig migration step).
+func NewTemperatureService(baseURL, telemetryURL string) *TemperatureService {
 	return &TemperatureService{
-		BaseURL: baseURL,
+		BaseURL:      baseURL,
+		TelemetryURL: telemetryURL,
 		HTTPClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
 	}
+}
+
+func (s *TemperatureService) forwardTelemetry(t *TemperatureResponse) {
+	if s.TelemetryURL == "" {
+		return
+	}
+	body, err := json.Marshal(map[string]interface{}{
+		"device_id": t.SensorID,
+		"metric":    "temperature",
+		"value":     t.Value,
+		"unit":      t.Unit,
+		"timestamp": t.Timestamp.Format(time.RFC3339),
+	})
+	if err != nil {
+		log.Printf("forward telemetry: marshal failed: %v", err)
+		return
+	}
+	go func() {
+		resp, err := s.HTTPClient.Post(
+			s.TelemetryURL+"/telemetry",
+			"application/json",
+			bytes.NewReader(body),
+		)
+		if err != nil {
+			log.Printf("forward telemetry: post failed: %v", err)
+			return
+		}
+		_ = resp.Body.Close()
+	}()
 }
 
 // GetTemperature fetches temperature data for a specific location
@@ -53,6 +88,8 @@ func (s *TemperatureService) GetTemperature(location string) (*TemperatureRespon
 	if err := json.NewDecoder(resp.Body).Decode(&temperatureResp); err != nil {
 		return nil, fmt.Errorf("error decoding temperature response: %w", err)
 	}
+
+	s.forwardTelemetry(&temperatureResp)
 
 	return &temperatureResp, nil
 }
@@ -75,6 +112,8 @@ func (s *TemperatureService) GetTemperatureByID(sensorID string) (*TemperatureRe
 	if err := json.NewDecoder(resp.Body).Decode(&temperatureResp); err != nil {
 		return nil, fmt.Errorf("error decoding temperature response: %w", err)
 	}
+
+	s.forwardTelemetry(&temperatureResp)
 
 	return &temperatureResp, nil
 }
