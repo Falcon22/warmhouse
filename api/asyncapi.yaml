@@ -1,0 +1,141 @@
+asyncapi: 2.6.0
+info:
+  title: WarmHouse Events
+  version: 1.0.0
+  description: Шина доменных событий между микросервисами WarmHouse поверх RabbitMQ.
+
+servers:
+  rabbit:
+    url: rabbitmq:5672
+    protocol: amqp
+    description: RabbitMQ message broker
+
+channels:
+  telemetry.received:
+    description: Сырые показания, полученные от устройств через IoT Gateway.
+    publish:
+      operationId: publishTelemetry
+      summary: IoT Gateway публикует показания
+      message:
+        $ref: '#/components/messages/TelemetryReceived'
+    subscribe:
+      operationId: consumeTelemetry
+      summary: Telemetry Service и Scenario Engine потребляют
+      message:
+        $ref: '#/components/messages/TelemetryReceived'
+
+  commands.acknowledged:
+    description: Подтверждение от устройства о выполнении команды.
+    publish:
+      operationId: publishCommandAck
+      summary: IoT Gateway публикует ACK после получения от устройства
+      message:
+        $ref: '#/components/messages/CommandAcknowledged'
+    subscribe:
+      operationId: consumeCommandAck
+      summary: Commands Service обновляет статус команды
+      message:
+        $ref: '#/components/messages/CommandAcknowledged'
+
+  device.registered:
+    description: Устройство привязано к пользователю.
+    publish:
+      operationId: publishDeviceRegistered
+      summary: Devices Service публикует событие
+      message:
+        $ref: '#/components/messages/DeviceRegistered'
+    subscribe:
+      operationId: consumeDeviceRegistered
+      summary: Scenario Engine и Notification Service потребляют
+      message:
+        $ref: '#/components/messages/DeviceRegistered'
+
+components:
+  messages:
+    TelemetryReceived:
+      name: TelemetryReceived
+      contentType: application/json
+      payload:
+        type: object
+        required: [device_id, metric, value, timestamp]
+        properties:
+          device_id:
+            type: string
+            format: uuid
+          owner_id:
+            type: string
+            format: uuid
+          metric:
+            type: string
+          value:
+            type: number
+          unit:
+            type: string
+          timestamp:
+            type: string
+            format: date-time
+      examples:
+        - payload:
+            device_id: "5b2d3c11-0c02-4f10-9b34-dd92cd9c7a01"
+            owner_id: "0e35a2b9-4f3e-4c6d-9a18-2c3a2c8d9b21"
+            metric: temperature
+            value: 21.5
+            unit: "°C"
+            timestamp: "2026-05-03T18:42:01Z"
+
+    CommandAcknowledged:
+      name: CommandAcknowledged
+      contentType: application/json
+      payload:
+        type: object
+        required: [command_id, device_id, status, acknowledged_at]
+        properties:
+          command_id:
+            type: string
+            format: uuid
+          device_id:
+            type: string
+            format: uuid
+          status:
+            type: string
+            enum: [SUCCESS, FAILED, TIMEOUT]
+          message:
+            type: string
+          acknowledged_at:
+            type: string
+            format: date-time
+      examples:
+        - payload:
+            command_id: "6a1f9e2c-4b80-49d7-8a3e-7e8a91234567"
+            device_id: "5b2d3c11-0c02-4f10-9b34-dd92cd9c7a01"
+            status: SUCCESS
+            acknowledged_at: "2026-05-03T18:42:05Z"
+
+    DeviceRegistered:
+      name: DeviceRegistered
+      contentType: application/json
+      payload:
+        type: object
+        required: [device_id, owner_id, type, registered_at]
+        properties:
+          device_id:
+            type: string
+            format: uuid
+          owner_id:
+            type: string
+            format: uuid
+          house_id:
+            type: string
+            format: uuid
+          type:
+            type: string
+          registered_at:
+            type: string
+            format: date-time
+      examples:
+        - payload:
+            device_id: "5b2d3c11-0c02-4f10-9b34-dd92cd9c7a01"
+            owner_id: "0e35a2b9-4f3e-4c6d-9a18-2c3a2c8d9b21"
+            house_id: "0e35a2b9-4f3e-4c6d-9a18-2c3a2c8d9b21"
+            type: HEATING
+            registered_at: "2026-05-03T18:30:00Z"

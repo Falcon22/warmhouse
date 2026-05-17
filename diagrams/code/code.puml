@@ -1,0 +1,81 @@
+@startuml
+title Code View: Devices Service — driver pattern
+
+class Device {
+    +id: DeviceID
+    +ownerID: UserID
+    +type: DeviceType
+    +status: DeviceStatus
+    +config: DeviceConfig
+    --
+    +Pair(code): error
+    +ApplyConfig(cfg): error
+}
+
+enum DeviceType {
+    HEATING
+    LIGHT
+    GATE
+    CAMERA
+    GENERIC
+}
+
+enum DeviceStatus {
+    UNPAIRED
+    ACTIVE
+    OFFLINE
+}
+
+interface DeviceDriver {
+    +Type(): DeviceType
+    +ValidateCommand(cmd): error
+    +EncodePayload(cmd): []byte
+    +DecodeTelemetry(raw): Telemetry
+}
+
+class HeatingDriver
+class LightDriver
+class GenericDriver
+
+HeatingDriver ..|> DeviceDriver
+LightDriver ..|> DeviceDriver
+GenericDriver ..|> DeviceDriver
+
+class DriverRegistry {
+    -drivers: map[DeviceType]DeviceDriver
+    +Register(d: DeviceDriver)
+    +Get(t: DeviceType): DeviceDriver
+}
+
+DriverRegistry o-- DeviceDriver
+
+class DeviceService {
+    -repo: DeviceRepository
+    -drivers: DriverRegistry
+    -events: EventPublisher
+    --
+    +Register(req): Device
+    +UpdateConfig(id, cfg): error
+    +Remove(id): error
+}
+
+interface DeviceRepository {
+    +Get(id): Device
+    +Save(d): error
+    +ListByOwner(o): []Device
+}
+
+class PostgresDeviceRepository
+PostgresDeviceRepository ..|> DeviceRepository
+
+interface EventPublisher {
+    +Publish(e: DomainEvent): error
+}
+
+DeviceService --> DeviceRepository
+DeviceService --> DriverRegistry
+DeviceService --> EventPublisher
+Device --> DeviceType
+Device --> DeviceStatus
+
+@enduml

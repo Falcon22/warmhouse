@@ -1,0 +1,22 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title Диаграмма контекста системы WarmHouse (To-Be)
+
+Person(user, "Пользователь", "Владелец умного дома. Сам подключает устройства и настраивает сценарии.")
+Person(support, "Customer Support", "Сотрудник поддержки.")
+
+System(smarthome, "Система управления Smart Home", "SaaS-платформа: устройства, телеметрия, сценарии.")
+
+System_Ext(partner_devices, "Партнёрские IoT-устройства", "Отопление, свет, ворота, камеры и др. Подключение по стандартным протоколам (MQTT / Matter / Zigbee).")
+System_Ext(payment, "Платёжный провайдер", "Оплата SaaS-подписки.")
+System_Ext(messaging, "Провайдеры уведомлений", "Email / SMS / Push.")
+
+Rel(user, smarthome, "Управление устройствами, телеметрия, сценарии", "HTTPS")
+Rel(support, smarthome, "Поддержка пользователей", "HTTPS")
+
+BiRel(smarthome, partner_devices, "Команды и телеметрия", "MQTT")
+Rel(smarthome, payment, "Платежи")
+Rel(smarthome, messaging, "Уведомления")
+
+@enduml

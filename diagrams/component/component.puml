@@ -1,0 +1,35 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Диаграмма компонентов: Devices Service
+
+Container(gateway, "API Gateway", "Go")
+Container(commands, "Commands Service", "Go")
+Container(iot, "IoT Gateway", "Go")
+ContainerDb(devices_db, "Devices Storage", "PostgreSQL")
+ContainerQueue(rabbit, "Message Broker", "RabbitMQ")
+
+Container_Boundary(devices, "Devices Service") {
+    Component(api, "API", "Go, Gin + gRPC", "REST для UI и gRPC для других сервисов")
+    Component(service, "Device Service", "Go", "Бизнес-логика: регистрация, валидация, владение")
+    Component(pairing, "Pairing Manager", "Go", "Self-service подключение устройств")
+    Component(drivers, "Drivers", "Go", "Heating, Light, Gate, Camera + Generic MQTT (fallback). Plug-in регистрация для новых типов")
+    Component(repo, "Device Repository", "Go, pgx", "Доступ к БД")
+    Component(events, "Event Publisher", "Go", "Публикация device.registered/removed")
+}
+
+Rel(gateway, api, "REST", "HTTPS")
+Rel(commands, api, "GetDevice", "gRPC")
+Rel(iot, api, "GetDevice", "gRPC")
+
+Rel(api, service, "")
+Rel(api, pairing, "")
+Rel(service, repo, "")
+Rel(service, drivers, "Получает спецификацию типа")
+Rel(service, events, "")
+Rel(pairing, repo, "")
+
+Rel(repo, devices_db, "SQL")
+Rel(events, rabbit, "publish", "AMQP")
+
+@enduml

@@ -1,0 +1,16 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title Диаграмма контекста системы WarmHouse (As-Is)
+
+Person(user, "Пользователь", "Владелец умного дома.")
+Person(admin, "Администратор", "Сотрудник компании.")
+
+System(smarthome, "Система управления Smart Home", "Монолит на Go. Управляет датчиками и температурой.")
+System_Ext(temp_api, "Temperature API", "Внешний сервис показаний температуры.")
+
+Rel(user, smarthome, "Запрос температуры, включение/выключение датчиков, выставление температуры")
+Rel(admin, smarthome, "Добавление, обновление, удаление датчиков. Просмотр списка датчиков")
+BiRel(smarthome, temp_api, "Запрос за температурой по датчику/локации")
+
+@enduml

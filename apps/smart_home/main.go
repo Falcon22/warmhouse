@@ -29,8 +29,12 @@ func main() {
 
 	// Initialize temperature service
 	temperatureAPIURL := getEnv("TEMPERATURE_API_URL", "http://temperature-api:8081")
-	temperatureService := services.NewTemperatureService(temperatureAPIURL)
+	telemetryServiceURL := getEnv("TELEMETRY_SERVICE_URL", "")
+	temperatureService := services.NewTemperatureService(temperatureAPIURL, telemetryServiceURL)
 	log.Printf("Temperature service initialized with API URL: %s\n", temperatureAPIURL)
+	if telemetryServiceURL != "" {
+		log.Printf("Telemetry forwarding enabled: %s\n", telemetryServiceURL)
+	}
 
 	// Initialize router
 	router := gin.Default()

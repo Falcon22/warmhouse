@@ -1,0 +1,86 @@
+@startuml
+title ER-диаграмма WarmHouse
+
+entity User {
+  * id : UUID <<PK>>
+  --
+  * email : VARCHAR
+  * name : VARCHAR
+  password_hash : VARCHAR
+  role : ENUM
+  created_at : TIMESTAMP
+}
+
+entity House {
+  * id : UUID <<PK>>
+  --
+  * owner_id : UUID <<FK>>
+  * name : VARCHAR
+  address : TEXT
+  timezone : VARCHAR
+}
+
+entity DeviceType {
+  * id : VARCHAR <<PK>>
+  --
+  * name : VARCHAR
+  capabilities : JSONB
+  protocol : VARCHAR
+}
+
+entity Device {
+  * id : UUID <<PK>>
+  --
+  * type_id : VARCHAR <<FK>>
+  * house_id : UUID <<FK>>
+  * serial_number : VARCHAR
+  * name : VARCHAR
+  status : ENUM
+  config : JSONB
+  last_seen_at : TIMESTAMP
+}
+
+entity TelemetryData {
+  * id : BIGSERIAL <<PK>>
+  --
+  * device_id : UUID <<FK>>
+  * metric : VARCHAR
+  * value : FLOAT
+  unit : VARCHAR
+  * timestamp : TIMESTAMPTZ
+}
+
+entity Scenario {
+  * id : UUID <<PK>>
+  --
+  * owner_id : UUID <<FK>>
+  * name : VARCHAR
+  enabled : BOOLEAN
+  dsl : TEXT
+  created_at : TIMESTAMP
+}
+
+entity ModuleKit {
+  * id : UUID <<PK>>
+  --
+  * name : VARCHAR
+  description : TEXT
+  price : DECIMAL
+}
+
+entity ModuleKitItem {
+  * kit_id : UUID <<PK,FK>>
+  * type_id : VARCHAR <<PK,FK>>
+  --
+  quantity : INTEGER
+}
+
+User ||--o{ House : "владеет"
+User ||--o{ Scenario : "настраивает"
+House ||--o{ Device : "содержит"
+DeviceType ||--o{ Device : "тип"
+Device ||--o{ TelemetryData : "генерирует"
+ModuleKit ||--o{ ModuleKitItem
+DeviceType ||--o{ ModuleKitItem
+
+@enduml

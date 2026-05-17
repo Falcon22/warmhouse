@@ -1,0 +1,72 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Диаграмма контейнеров системы WarmHouse (To-Be)
+
+Person(user, "Пользователь", "Владелец умного дома")
+
+System_Boundary(smarthome, "Система управления Smart Home") {
+    Container(web, "Web App", "JavaScript, React", "Веб-приложение")
+    Container(mobile, "Mobile App", "iOS / Android", "Мобильное приложение")
+
+    Container(gateway, "API Gateway", "Go", "Маршрутизация запросов, проверка JWT")
+
+    Container(auth, "Auth Service", "Go", "Регистрация и аутентификация пользователей")
+    ContainerDb(auth_db, "Auth Storage", "PostgreSQL", "Пользователи и роли")
+    ContainerDb(redis, "Redis", "Redis", "Сессии и кэш")
+
+    Container(devices, "Devices Service", "Go", "Реестр устройств, pairing, драйверы")
+    ContainerDb(devices_db, "Devices Storage", "PostgreSQL", "Устройства и конфигурации")
+
+    Container(telemetry, "Telemetry Service", "Go", "Хранение и выдача показаний")
+    ContainerDb(telemetry_db, "Telemetry Storage", "TimescaleDB", "Time-series измерения")
+
+    Container(commands, "Commands Service", "Go", "Отправка команд устройствам")
+
+    Container(scenario, "Scenario Engine", "Go", "Пользовательские сценарии when/then")
+    ContainerDb(scenario_db, "Scenario Storage", "PostgreSQL", "Правила и журнал срабатываний")
+
+    Container(notify, "Notification Service", "Go", "Email / Push / SMS")
+
+    ContainerQueue(rabbit, "Message Broker", "RabbitMQ", "Команды и доменные события")
+
+    Container(iot, "IoT Gateway", "Go", "Bridge MQTT ↔ RabbitMQ")
+    Container(mqtt, "MQTT Broker", "EMQX", "Канал устройств")
+}
+
+System_Ext(devices_ext, "Партнёрские IoT-устройства", "Подключаются по MQTT / Matter / Zigbee")
+System_Ext(messaging_ext, "Провайдеры уведомлений", "Email / SMS / Push")
+
+Rel(user, web, "Использует", "HTTPS")
+Rel(user, mobile, "Использует", "HTTPS")
+
+Rel(web, gateway, "REST + WebSocket", "HTTPS")
+Rel(mobile, gateway, "REST + WebSocket", "HTTPS")
+
+Rel(gateway, auth, "gRPC")
+Rel(gateway, devices, "gRPC")
+Rel(gateway, telemetry, "gRPC")
+Rel(gateway, commands, "gRPC")
+Rel(gateway, scenario, "gRPC")
+
+Rel(auth, auth_db, "SQL")
+Rel(auth, redis, "Сессии")
+Rel(devices, devices_db, "SQL")
+Rel(telemetry, telemetry_db, "SQL")
+Rel(scenario, scenario_db, "SQL")
+
+Rel(commands, rabbit, "publish команды", "AMQP")
+Rel(rabbit, iot, "consume", "AMQP")
+Rel(iot, mqtt, "publish/subscribe", "MQTT")
+BiRel(mqtt, devices_ext, "Команды и телеметрия", "MQTT")
+
+Rel(iot, rabbit, "publish telemetry, device events", "AMQP")
+Rel(rabbit, telemetry, "consume telemetry", "AMQP")
+Rel(rabbit, scenario, "consume events", "AMQP")
+Rel(scenario, rabbit, "publish команды и нотификации", "AMQP")
+Rel(rabbit, notify, "consume notifications", "AMQP")
+Rel(devices, rabbit, "publish device.registered/removed", "AMQP")
+
+Rel(notify, messaging_ext, "Отправка")
+
+@enduml
